@@ -24,25 +24,29 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Safely Purge Animation Files Only (Keep XMLs Intact)
+    - name: Scan and Destroy All Files Starting with $
       run: |
         python3 -c "
         import os
 
-        print('--- Safely deleting problematic animation files ---')
+        print('--- Scanning res/ directory for dollar-sign filenames ---')
+        if not os.path.exists('res'):
+            print('ERROR: res directory not found!')
+        
         deleted_count = 0
         for root, dirs, files in os.walk('res'):
             for f in files:
-                # Only delete the specific animation/checkbox files that trigger aapt2 errors
-                if f.startswith(('avd_', 'm3_avd_', 'mtrl_checkbox_', 'follow_focus')) or '$' in f:
+                # Check if filename starts with or contains a dollar sign
+                if '$' in f or f.startswith('$'):
                     path = os.path.join(root, f)
                     try:
                         os.remove(path)
-                        print(f'Deleted: {path}')
+                        print(f'SUCCESSFULLY DELETED: {path}')
                         deleted_count += 1
                     except Exception as e:
-                        print(f'Failed to delete {path}: {e}')
-        print(f'Total animation files purged: {deleted_count}')
+                        print(f'FAILED TO DELETE {path}: {e}')
+                        
+        print(f'Total illegal files wiped out: {deleted_count}')
         "
 
     - name: Build Unsigned APK
