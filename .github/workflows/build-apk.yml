@@ -2,67 +2,106 @@ name: Build and Sign F-cam APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v5
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
-    - name: Install Apktool and Build Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y apktool android-sdk-build-tools
+      # Official Apktool jar (bundles its own aapt2).
+      # Your old run used "2.7.0-dirty", which could not extract its aapt2
+      # and fell back to the system one that rejects names starting with $.
+      - name: Install Apktool
+        run: |
+          mkdir -p "$HOME/tools"
+          curl -fL -o "$HOME/tools/apktool.jar" \
+            https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar
+          printf '#!/bin/sh\nexec java -jar "%s/tools/apktool.jar" "$@"\n' "$HOME" > "$HOME/tools/apktool"
+          chmod +x "$HOME/tools/apktool"
+          echo "$HOME/tools" >> "$GITHUB_PATH"
 
-    - name: Scan and Destroy All Files Starting with $
-      run: |
-        python3 -c "
-        import os
+      # Fixes: resource 'drawable/$avd_hide_password__0' has invalid entry name.
+      # Renames every res file starting with "$" and updates all references
+      # (layouts, drawables, values, public.xml) so nothing is left dangling.
+      - name: Fix resource names starting with $
+        run: |
+          python3 - <<'PY'
+          import os, re
 
-        print('--- Scanning res/ directory for dollar-sign filenames ---')
-        if not os.path.exists('res'):
-            print('ERROR: res directory not found!')
-        
-        deleted_count = 0
-        for root, dirs, files in os.walk('res'):
-            for f in files:
-                # Check if filename starts with or contains a dollar sign
-                if '$' in f or f.startswith('$'):
-                    path = os.path.join(root, f)
-                    try:
-                        os.remove(path)
-                        print(f'SUCCESSFULLY DELETED: {path}')
-                        deleted_count += 1
-                    except Exception as e:
-                        print(f'FAILED TO DELETE {path}: {e}')
-                        
-        print(f'Total illegal files wiped out: {deleted_count}')
-        "
+          res = "res"
+          renames = {}  # old resource name -> new resource name
 
-    - name: Build Unsigned APK
-      run: |
-        mkdir -p dist
-        apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
+          for root, dirs, files in os.walk(res):
+              for f in files:
+                  if f.startswith("$"):
+                      old = f
+                      new = "dollar_" + f[1:]
+                      os.rename(os.path.join(root, old), os.path.join(root, new))
+                      renames[os.path.splitext(old)[0]] = os.path.splitext(new)[0]
 
-    - name: Sign APK with Test Key
-      run: |
-        keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
-        zipalign -v -p 4 dist/F-cam-unsigned.apk dist/F-cam-aligned.apk
-        apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android dist/F-cam-aligned.apk
-        cp dist/F-cam-aligned.apk dist/F-cam-release.apk
+          print(f"Renamed {len(renames)} files")
 
-    - name: Upload Built APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: F-cam-Signed-APK
-        path: dist/F-cam-release.apk
+          # longest names first so shorter names never clobber longer ones
+          ordered = sorted(renames.items(), key=lambda kv: -len(kv[0]))
+
+          for root, dirs, files in os.walk(res):
+              for f in files:
+                  if not f.endswith(".xml"):
+                      continue
+                  p = os.path.join(root, f)
+                  try:
+                      s = open(p, encoding="utf-8").read()
+                  except UnicodeDecodeError:
+                      continue
+                  orig = s
+                  for old, new in ordered:
+                      s = s.replace(old, new)
+                  if s != orig:
+                      open(p, "w", encoding="utf-8").write(s)
+
+          # Any leftover "$" resource names inside value files
+          for root, dirs, files in os.walk(res):
+              for f in files:
+                  if f.endswith(".xml"):
+                      p = os.path.join(root, f)
+                      try:
+                          s = open(p, encoding="utf-8").read()
+                      except UnicodeDecodeError:
+                          continue
+                      s2 = re.sub(r'name="\$', 'name="dollar_', s)
+                      if s2 != s:
+                          open(p, "w", encoding="utf-8").write(s2)
+          PY
+
+      - name: Build Unsigned APK
+        run: |
+          mkdir -p dist
+          apktool b . -o dist/unsigned.apk
+
+      - name: Zipalign and Sign APK with Test Key
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          keytool -genkeypair -keystore test.jks -storepass android -keypass android \
+            -alias test -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Test, O=Test, C=US"
+          "$BT/zipalign" -f -p 4 dist/unsigned.apk dist/aligned.apk
+          "$BT/apksigner" sign --ks test.jks --ks-pass pass:android --key-pass pass:android \
+            --out dist/F-cam-signed.apk dist/aligned.apk
+          "$BT/apksigner" verify dist/F-cam-signed.apk
+
+      - name: Upload Built APK Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: F-cam-signed-apk
+          path: dist/F-cam-signed.apk
