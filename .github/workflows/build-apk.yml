@@ -24,19 +24,45 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Purge Problematic AVD XML Files Recursively
+    - name: Complete Resource Clean (Purge Files & Clean public.xml)
       run: |
         python3 -c "
-        import os
-        deleted = 0
+        import os, re
+
+        print('--- STEP 1: Deleting physical resource files starting with $ or containing dollar signs ---')
+        deleted_count = 0
         for root, dirs, files in os.walk('res'):
             for f in files:
-                if 'avd_' in f or 'mtrl_checkbox_' in f or 'follow_focus' in f:
-                    path = os.path.join(root, f)
-                    os.remove(path)
-                    print(f'Purged source XML: {path}')
-                    deleted += 1
-        print(f'Total animation source files purged: {deleted}')
+                if '$' in f or 'avd_' in f or 'mtrl_checkbox' in f:
+                    file_path = os.path.join(root, f)
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                    except Exception as e:
+                        pass
+        print(f'Deleted {deleted_count} problematic XML/image files.')
+
+        print('--- STEP 2: Cleaning XML references in values files ---')
+        cleaned_entries = 0
+        for root, dirs, files in os.walk('res/values'):
+            for f in files:
+                if f.endswith('.xml'):
+                    xml_path = os.path.join(root, f)
+                    with open(xml_path, 'r', encoding='utf-8', errors='ignore') as fp:
+                        content = fp.read()
+                    
+                    # Remove any line that defines or references resources containing '$'
+                    new_lines = []
+                    for line in content.splitlines():
+                        if '$' in line or 'avd_hide_password' in line or 'avd_show_password' in line:
+                            cleaned_entries += 1
+                            continue
+                        new_lines.append(line)
+                    
+                    with open(xml_path, 'w', encoding='utf-8') as fp:
+                        fp.write('\n'.join(new_lines))
+
+        print(f'Purged {cleaned_entries} invalid XML entries from values files.')
         "
 
     - name: Build Unsigned APK
