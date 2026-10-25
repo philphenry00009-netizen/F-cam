@@ -41,3 +41,4 @@ jobs:
         with:
           name: F-cam-Signed-APK
           path: dist/F-cam-signed.apk
+# Build trigger timestamp: Sun Oct 25 17:18:46 UTC 2026
