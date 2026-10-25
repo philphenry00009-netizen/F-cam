@@ -24,29 +24,28 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Deep Purge All Invalid Animation Files
+    - name: Aggressive Workspace Scan and Destroy ($ files)
       run: |
         python3 -c "
         import os
 
-        print('--- Recursively hunting and destroying all problematic AVD and Material XMLs ---')
+        print('--- Scanning entire repository workspace for dollar-sign files ---')
         deleted_count = 0
-        
-        target_prefixes = ('avd_', 'm3_avd_', 'mtrl_checkbox_', 'follow_focus')
-
-        for root, dirs, files in os.walk('res'):
+        for root, dirs, files in os.walk('.'):
+            # Skip git metadata folder
+            if '.git' in root:
+                continue
             for f in files:
-                # Check if the filename starts with any forbidden prefix or contains a dollar sign
-                if f.startswith(target_prefixes) or '$' in f:
-                    file_path = os.path.join(root, f)
+                if '$' in f:
+                    path = os.path.join(root, f)
                     try:
-                        os.remove(file_path)
-                        print(f'Deleted: {file_path}')
+                        os.remove(path)
+                        print(f'DELETED: {path}')
                         deleted_count += 1
                     except Exception as e:
-                        print(f'Failed to delete {file_path}: {e}')
+                        print(f'FAILED TO DELETE {path}: {e}')
                         
-        print(f'Total illegal files purged: {deleted_count}')
+        print(f'Total illegal files wiped out: {deleted_count}')
         "
 
     - name: Build Unsigned APK
@@ -58,7 +57,7 @@ jobs:
       run: |
         keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
         zipalign -v -p 4 dist/F-cam-unsigned.apk dist/F-cam-aligned.apk
-        apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android dist/F-cam-aligned.apk
+        apksigner sign --ks debug.keystore --ks-pass pass:android --key-press pass:android dist/F-cam-aligned.apk
         cp dist/F-cam-aligned.apk dist/F-cam-release.apk
 
     - name: Upload Built APK Artifact
