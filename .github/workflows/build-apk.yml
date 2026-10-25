@@ -197,12 +197,45 @@ jobs:
                           print("WARNING still references missing:", p, bad)
           PY
 
+      # Fixes: "attribute android:defaultLocale not found".
+      # The attribute is newer than Apktool's bundled framework. It only sets a
+      # default-locale hint, so dropping it is harmless.
+      - name: Remove unsupported locale attribute
+        run: |
+          f=res/xml/_generated_res_locale_config.xml
+          if [ -f "$f" ]; then
+            sed -i -E 's/[[:space:]]+android:defaultLocale="[^"]*"//g' "$f"
+            echo "Patched $f"
+          fi
+
+      # Prevents the whole class of "attribute/resource X not found" errors for
+      # new Android versions: use the newest SDK platform jar on the runner as
+      # the framework. If the build fails with it, the next step retries with
+      # Apktool's own framework automatically.
+      - name: Use newest Android SDK platform as framework
+        run: |
+          JAR=$(ls -d "$ANDROID_HOME"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -1)
+          if [ -n "$JAR" ]; then
+            mkdir -p "$HOME/.local/share/apktool/framework"
+            cp "$JAR" "$HOME/.local/share/apktool/framework/1.apk"
+            echo "Framework: $JAR"
+          else
+            echo "No SDK platform jar found; using Apktool's bundled framework"
+          fi
+
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
           set +e
-          apktool b . -o dist/unsigned.apk > build.log 2>&1
+          apktool b -f . -o dist/unsigned.apk > build.log 2>&1
           code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "Attempt 1 failed (SDK framework). Retrying with Apktool's bundled framework..."
+            cp build.log build-attempt1.log
+            rm -f "$HOME/.local/share/apktool/framework/1.apk"
+            apktool b -f . -o dist/unsigned.apk > build.log 2>&1
+            code=$?
+          fi
           set -e
           if [ "$code" -ne 0 ]; then
             echo "=================== BUILD FAILED ==================="
@@ -214,13 +247,17 @@ jobs:
             tail -15 build.log
             exit "$code"
           fi
+          ls -l dist/unsigned.apk
 
       - name: Upload build log
         if: failure()
         uses: actions/upload-artifact@v5
         with:
           name: build-log
-          path: build.log
+          path: |
+            build.log
+            build-attempt1.log
+          if-no-files-found: ignore
 
       - name: Zipalign and Sign APK with Test Key
         run: |
