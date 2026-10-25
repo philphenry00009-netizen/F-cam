@@ -26,20 +26,6 @@ jobs:
 
       - name: Build Unsigned APK
         run: |
-          mkdir -p dist
-          python3 -c "import os\nfor r, ds, fs in os.walk(.):\n    if .git in r: continue\n    for f in fs:\n        if  in f:
-            os.rename(os.path.join(r, f), os.path.join(r, f.replace(, s_)))\n" && python3 clean_res.py && apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
-
-      - name: Generate Debug Keystore & Sign APK
-        run: |
-          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
-          BUILD_TOOLS_VERSION=$(ls -1 $ANDROID_HOME/build-tools | sort -r | head -n 1)
-          APKSIGNER=$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner
-          $APKSIGNER sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out dist/F-cam-signed.apk dist/F-cam-unsigned.apk
-
-      - name: Upload Signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: F-cam-Signed-APK
-          path: dist/F-cam-signed.apk
-# Build trigger timestamp: Sun Oct 25 17:18:46 UTC 2026
+            mkdir -p dist
+            python3 clean_res.py
+            apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
