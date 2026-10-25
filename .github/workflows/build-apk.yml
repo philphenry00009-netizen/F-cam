@@ -36,17 +36,12 @@ jobs:
     - name: Build Unsigned APK
       run: |
         mkdir -p dist
-        apktool b . -o dist/F-cam-unsigned.apk
+        apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
 
     - name: Sign APK with Test Key
       run: |
-        # Generate a temporary debug keystore to sign the APK for immediate testing
         keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
-        
-        # Align the APK
         zipalign -v -p 4 dist/F-cam-unsigned.apk dist/F-cam-aligned.apk
-        
-        # Sign the APK
         apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android dist/F-cam-aligned.apk
         cp dist/F-cam-aligned.apk dist/F-cam-release.apk
 
