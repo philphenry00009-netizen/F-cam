@@ -27,7 +27,7 @@ jobs:
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
-          apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
+          find . -name "*$*" -exec rename 's/\$/s_/g' {} + 2>/dev/null || true; apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
 
       - name: Generate Debug Keystore & Sign APK
         run: |
