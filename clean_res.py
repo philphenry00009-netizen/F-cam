@@ -1,32 +1,32 @@
 import os
 
-print("Starting aggressive dollar-sign resource cleanup...")
+print("Forcing explicit scan of res/ directories for $ characters...")
 count = 0
 
-# Walk bottom-up (topdown=False) so we rename files before their parent directories if needed
+res_dir = "./res"
+if os.path.exists(res_dir):
+    for root, dirs, files in os.walk(res_dir, topdown=False):
+        for f in files:
+            if "$" in f:
+                old_path = os.path.join(root, f)
+                new_file = f.replace("$", "s_")
+                new_path = os.path.join(root, new_file)
+                os.rename(old_path, new_path)
+                print(f"FORCED RENAME: {old_path} -> {new_path}")
+                count += 1
+else:
+    print("Warning: ./res directory not found directly.")
+
+# Also fallback to general walk just in case
 for root, dirs, files in os.walk(".", topdown=False):
     for f in files:
         if "$" in f:
             old_path = os.path.join(root, f)
             new_file = f.replace("$", "s_")
             new_path = os.path.join(root, new_file)
-            try:
+            if os.path.exists(old_path):
                 os.rename(old_path, new_path)
-                print(f"RENAMED FILE: {old_path} -> {new_path}")
+                print(f"FALLBACK RENAME: {old_path} -> {new_path}")
                 count += 1
-            except Exception as e:
-                print(f"Error renaming {old_path}: {e}")
 
-    for d in dirs:
-        if "$" in d:
-            old_path = os.path.join(root, d)
-            new_dir = d.replace("$", "s_")
-            new_path = os.path.join(root, new_dir)
-            try:
-                os.rename(old_path, new_path)
-                print(f"RENAMED DIR: {old_path} -> {new_path}")
-                count += 1
-            except Exception as e:
-                print(f"Error renaming dir {old_path}: {e}")
-
-print(f"Aggressive cleanup complete. Total renamed: {count}")
+print(f"Explicit cleanup finished. Total files renamed: {count}")
