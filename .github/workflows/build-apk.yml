@@ -24,25 +24,24 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Purge Problematic Animation XML Files
+    - name: Sanitize Illegal Resource Names (Remove $)
       run: |
         python3 -c "
         import os
 
-        print('--- Purging AVD and Material Animation XML files ---')
-        deleted = 0
+        print('--- Sanitizing resource filenames containing \$ ---')
+        renamed_count = 0
         for root, dirs, files in os.walk('res'):
             for f in files:
-                # Target the exact files that force aapt2 to generate illegal $ names
-                if f.startswith('avd_') or f.startswith('m3_avd_') or f.startswith('mtrl_checkbox_') or f.startswith('follow_focus'):
-                    path = os.path.join(root, f)
-                    try:
-                        os.remove(path)
-                        print(f'Deleted: {path}')
-                        deleted += 1
-                    except Exception as e:
-                        print(f'Failed to delete {path}: {e}')
-        print(f'Total animation files purged: {deleted}')
+                if '$' in f:
+                    old_path = os.path.join(root, f)
+                    # Replace dollar sign with underscore or remove it
+                    new_filename = f.replace('$', '_')
+                    new_path = os.path.join(root, new_filename)
+                    os.rename(old_path, new_path)
+                    print(f'Renamed: {old_path} -> {new_path}')
+                    renamed_count += 1
+        print(f'Successfully sanitized {renamed_count} resource files.')
         "
 
     - name: Build Unsigned APK
