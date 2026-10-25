@@ -1,6 +1,3 @@
-cd /workspaces/BeamerA/fcam-source
-
-cat << 'EOF' > .github/workflows/build-apk.yml
 name: Build and Sign F-cam APK
 
 on:
@@ -44,9 +41,3 @@ jobs:
         with:
           name: F-cam-Signed-APK
           path: dist/F-cam-signed.apk
-EOF
-
-git add .github/workflows/build-apk.yml
-git commit -m "fix: correct standard yaml step indentations"
-git push origin main
-
