@@ -28,4 +28,4 @@ jobs:
         run: |
             mkdir -p dist
             python3 clean_res.py
-            apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
+            apktool b . -o dist/F-cam-unsigned.apk
