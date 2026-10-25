@@ -24,16 +24,16 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Purge Problematic Animation Files & Clean Public XMLs
+    - name: Safely Purge Animation Files Only (Keep XMLs Intact)
       run: |
         python3 -c "
-        import os, re
+        import os
 
-        print('--- Recursively deleting animation source files that trigger aapt2 dollar errors ---')
+        print('--- Safely deleting problematic animation files ---')
         deleted_count = 0
         for root, dirs, files in os.walk('res'):
             for f in files:
-                # Target animation and material checkbox files that force aapt2 to create $ names
+                # Only delete the specific animation/checkbox files that trigger aapt2 errors
                 if f.startswith(('avd_', 'm3_avd_', 'mtrl_checkbox_', 'follow_focus')) or '$' in f:
                     path = os.path.join(root, f)
                     try:
@@ -42,24 +42,7 @@ jobs:
                         deleted_count += 1
                     except Exception as e:
                         print(f'Failed to delete {path}: {e}')
-        print(f'Total purged files: {deleted_count}')
-
-        print('--- Scrubbing any remaining $ references from values/public XMLs ---')
-        for root, dirs, files in os.walk('res/values'):
-            for f in files:
-                if f.endswith('.xml'):
-                    path = os.path.join(root, f)
-                    try:
-                        with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-                            content = file.read()
-                        # Remove lines containing dollar sign references
-                        new_lines = [line for line in content.splitlines() if '$' not in line]
-                        if len(new_lines) != len(content.splitlines()):
-                            with open(path, 'w', encoding='utf-8') as file:
-                                file.write('\n'.join(new_lines))
-                            print(f'Cleaned references in: {path}')
-                    except Exception as e:
-                        print(f'Error cleaning {path}: {e}')
+        print(f'Total animation files purged: {deleted_count}')
         "
 
     - name: Build Unsigned APK
