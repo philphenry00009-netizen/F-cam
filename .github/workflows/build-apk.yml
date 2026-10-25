@@ -10,22 +10,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Install Build Tools & Apktool
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apktool aapt
+    - name: Install Apktool and Build Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y apktool android-sdk-build-tools
 
-      - name: Build Unsigned APK
-        run: |
-            mkdir -p dist
-            python3 clean_res.py
-            apktool b . -o dist/F-cam-unsigned.apk
+    - name: Purge Problematic AVD Drawables (AAPT2 Fix)
+      run: |
+        echo "Removing Material AVD XML files that trigger internal $ resource generation..."
+        rm -f res/drawable/avd_*.xml
+        rm -f res/drawable/m3_avd_*.xml
+        rm -f res/drawable/mtrl_checkbox_*.xml
+        rm -f res/drawable/follow_focus.xml
+        echo "AAPT2 resource purge complete."
+
+    - name: Build Unsigned APK
+      run: |
+        mkdir -p dist
+        apktool b . -o dist/F-cam-unsigned.apk
+
+    - name: Sign APK with Test Key
+      run: |
+        # Generate a temporary debug keystore to sign the APK for immediate testing
+        keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
+        
+        # Align the APK
+        zipalign -v -p 4 dist/F-cam-unsigned.apk dist/F-cam-aligned.apk
+        
+        # Sign the APK
+        apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android dist/F-cam-aligned.apk
+        cp dist/F-cam-aligned.apk dist/F-cam-release.apk
+
+    - name: Upload Built APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: F-cam-Signed-APK
+        path: dist/F-cam-release.apk
