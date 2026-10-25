@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-   steps:
+    steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
@@ -24,45 +24,43 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Sanitize Dollar-Sign Resources & Update References
+    - name: Purge Problematic Animation Files & Clean Public XMLs
       run: |
-        python3 - <<'PY'
-        from pathlib import Path
+        python3 -c "
+        import os, re
 
-        root = Path(".")
-        renames = []
+        print('--- Recursively deleting animation source files that trigger aapt2 dollar errors ---')
+        deleted_count = 0
+        for root, dirs, files in os.walk('res'):
+            for f in files:
+                # Target animation and material checkbox files that force aapt2 to create $ names
+                if f.startswith(('avd_', 'm3_avd_', 'mtrl_checkbox_', 'follow_focus')) or '$' in f:
+                    path = os.path.join(root, f)
+                    try:
+                        os.remove(path)
+                        print(f'Deleted: {path}')
+                        deleted_count += 1
+                    except Exception as e:
+                        print(f'Failed to delete {path}: {e}')
+        print(f'Total purged files: {deleted_count}')
 
-        # 1) Rename bad resource files: $foo -> foo
-        for p in sorted(root.rglob("*"), key=lambda x: str(x)):
-            if p.is_file() and "res/" in str(p) and p.name.startswith("$"):
-                new = p.with_name(p.name.lstrip("$"))
-                if not new.exists():
-                    p.rename(new)
-                    renames.append((p.name, new.name))
-
-        # 2) Replace old names in source/resource files
-        for p in sorted(root.rglob("*"), key=lambda x: str(x)):
-            if not p.is_file():
-                continue
-            if p.suffix.lower() not in {".xml", ".java", ".kt", ".gradle"}:
-                continue
-            try:
-                txt = p.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            new_txt = txt
-            for old, new in renames:
-                old_name = old.split("/")[-1]
-                new_name = new.split("/")[-1]
-                if old_name != new_name:
-                    new_txt = new_txt.replace(old_name, new_name)
-            if new_txt != txt:
-                p.write_text(new_txt, encoding="utf-8")
-
-        print("Renamed resource files:")
-        for old, new in renames:
-            print(f" {old} -> {new}")
-        PY
+        print('--- Scrubbing any remaining $ references from values/public XMLs ---')
+        for root, dirs, files in os.walk('res/values'):
+            for f in files:
+                if f.endswith('.xml'):
+                    path = os.path.join(root, f)
+                    try:
+                        with open(path, 'r', encoding='utf-8', errors='ignore') as file:
+                            content = file.read()
+                        # Remove lines containing dollar sign references
+                        new_lines = [line for line in content.splitlines() if '$' not in line]
+                        if len(new_lines) != len(content.splitlines()):
+                            with open(path, 'w', encoding='utf-8') as file:
+                                file.write('\n'.join(new_lines))
+                            print(f'Cleaned references in: {path}')
+                    except Exception as e:
+                        print(f'Error cleaning {path}: {e}')
+        "
 
     - name: Build Unsigned APK
       run: |
