@@ -24,12 +24,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Clean Bad Resource Files Safely
+    - name: Purge Problematic Files and API 34 Colors Override
       run: |
         python3 -c "
-        import os, xml.etree.ElementTree as ET
+        import os
 
-        print('--- Deleting physical files with $ in filename ---')
+        print('--- STEP 1: Deleting physical files with dollar signs ---')
         for root, dirs, files in os.walk('res'):
             for f in files:
                 if '$' in f:
@@ -40,19 +40,11 @@ jobs:
                     except Exception:
                         pass
 
-        print('--- Safely cleaning public.xml using XML parser ---')
-        public_xml = 'res/values/public.xml'
-        if os.path.exists(public_xml):
-            try:
-                tree = ET.parse(public_xml)
-                xml_root = tree.getroot()
-                to_remove = [elem for elem in xml_root if '$' in elem.get('name', '')]
-                for elem in to_remove:
-                    xml_root.remove(elem)
-                tree.write(public_xml, encoding='utf-8', xml_declaration=True)
-                print(f'Safely removed {len(to_remove)} entries from public.xml')
-            except Exception as e:
-                print(f'XML cleaning error: {e}')
+        print('--- STEP 2: Removing restricted API 34 colors.xml override ---')
+        target_colors = 'res/values-v34/colors.xml'
+        if os.path.exists(target_colors):
+            os.remove(target_colors)
+            print(f'Successfully removed {target_colors}')
         "
 
     - name: Build Unsigned APK
