@@ -1,12 +1,6 @@
 cd /workspaces/BeamerA/fcam-source
 
-# 1. Rename files containing '$' in res/drawable to remove invalid characters
-find res/drawable -name '*\$*' | while read -r file; do
-  newfile=$(echo "$file" | sed 's/\$/_/' | sed 's/__/_/g')
-  mv "$file" "$newfile"
-done
-
-# 2. Update workflow to force aapt2 and build properly
+# Re-write the workflow file cleanly from scratch (no comments inside)
 cat << 'EOF' > .github/workflows/build-apk.yml
 name: Build and Sign F-cam APK
 
@@ -37,7 +31,6 @@ jobs:
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
-          # Force apktool to use aapt/aapt2 and bypass prebuilt binary bugs
           apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
 
       - name: Generate Debug Keystore & Sign APK
@@ -54,7 +47,7 @@ jobs:
           path: dist/F-cam-signed.apk
 EOF
 
-# 3. Commit and push
-git add res/ .github/workflows/build-apk.yml
-git commit -m "fix: clean invalid resource names and use aapt2 for build"
+# Commit and push the clean fix
+git add .github/workflows/build-apk.yml
+git commit -m "fix: remove terminal text leakage and correct workflow syntax"
 git push origin main
