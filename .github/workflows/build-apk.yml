@@ -84,6 +84,64 @@ jobs:
                           open(p, "w", encoding="utf-8").write(s2)
           PY
 
+      # Removes public.xml entries that point at resource files that don't exist
+      # (fixes: "no definition for declared symbol ...drawable/dollar_avd_...").
+      - name: Remove dangling public.xml entries
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          res = "res"
+          file_types = {"drawable","layout","anim","animator","xml","raw","color",
+                        "mipmap","menu","interpolator","transition","font","navigation"}
+          defined = set()
+          for d in os.listdir(res):
+              t = d.split("-")[0]
+              if t in file_types and os.path.isdir(os.path.join(res, d)):
+                  for f in os.listdir(os.path.join(res, d)):
+                      defined.add((t, os.path.splitext(f)[0]))
+
+          p = os.path.join(res, "values", "public.xml")
+          if os.path.exists(p):
+              out, removed = [], 0
+              for line in open(p, encoding="utf-8"):
+                  m = re.search(r'<public\s+type="(\w+)"\s+name="([^"]+)"', line)
+                  if m and m.group(1) in file_types and m.group(2).startswith(("dollar_", "$")) \
+                          and (m.group(1), m.group(2)) not in defined:
+                      removed += 1
+                      continue
+                  out.append(line)
+              open(p, "w", encoding="utf-8").write("".join(out))
+              print(f"Removed {removed} dangling public.xml entries")
+          PY
+
+      # Android 14 palette colors missing from Apktool's bundled framework.
+      - name: Replace missing android:color palette references
+        run: |
+          python3 - <<'PY'
+          import os
+          colors = {
+            "Teal_700":"#00796B","Teal_800":"#00695C","Indigo_700":"#303F9F",
+            "Indigo_800":"#283593","Blue_700":"#1976D2","Blue_800":"#1565C0",
+            "Purple_700":"#7B1FA2","Purple_800":"#6A1B9A","Pink_700":"#C2185B",
+            "Pink_800":"#AD1457","Red_700":"#D32F2F","Red_800":"#C62828",
+          }
+          for root, _, files in os.walk("res"):
+              if not os.path.basename(root).startswith("values"):
+                  continue
+              for f in files:
+                  if not f.endswith(".xml"):
+                      continue
+                  p = os.path.join(root, f)
+                  s = open(p, encoding="utf-8").read()
+                  o = s
+                  for k, v in colors.items():
+                      s = s.replace("@android:color/" + k, v)
+                  if s != o:
+                      open(p, "w", encoding="utf-8").write(s)
+                      print("patched", p)
+          PY
+
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
