@@ -24,29 +24,45 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Aggressive Workspace Scan and Destroy ($ files)
+    - name: Sanitize Dollar-Sign Resources & Update References
       run: |
-        python3 -c "
-        import os
+        python3 - <<'PY'
+        from pathlib import Path
 
-        print('--- Scanning entire repository workspace for dollar-sign files ---')
-        deleted_count = 0
-        for root, dirs, files in os.walk('.'):
-            # Skip git metadata folder
-            if '.git' in root:
+        root = Path(".")
+        renames = []
+
+        # 1) Rename bad resource files: $foo -> foo
+        for p in sorted(root.rglob("*"), key=lambda x: str(x)):
+            if p.is_file() and "res/" in str(p) and p.name.startswith("$"):
+                new = p.with_name(p.name.lstrip("$"))
+                if not new.exists():
+                    p.rename(new)
+                    renames.append((p.name, new.name))
+
+        # 2) Replace old names in source/resource files
+        for p in sorted(root.rglob("*"), key=lambda x: str(x)):
+            if not p.is_file():
                 continue
-            for f in files:
-                if '$' in f:
-                    path = os.path.join(root, f)
-                    try:
-                        os.remove(path)
-                        print(f'DELETED: {path}')
-                        deleted_count += 1
-                    except Exception as e:
-                        print(f'FAILED TO DELETE {path}: {e}')
-                        
-        print(f'Total illegal files wiped out: {deleted_count}')
-        "
+            if p.suffix.lower() not in {".xml", ".java", ".kt", ".gradle"}:
+                continue
+            try:
+                txt = p.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            new_txt = txt
+            for old, new in renames:
+                old_name = old.split("/")[-1]
+                new_name = new.split("/")[-1]
+                if old_name != new_name:
+                    new_txt = new_txt.replace(old_name, new_name)
+            if new_txt != txt:
+                p.write_text(new_txt, encoding="utf-8")
+
+        print("Renamed resource files:")
+        for old, new in renames:
+            print(f" {old} -> {new}")
+        PY
 
     - name: Build Unsigned APK
       run: |
@@ -57,7 +73,7 @@ jobs:
       run: |
         keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -passin pass:android -passout pass:android
         zipalign -v -p 4 dist/F-cam-unsigned.apk dist/F-cam-aligned.apk
-        apksigner sign --ks debug.keystore --ks-pass pass:android --key-press pass:android dist/F-cam-aligned.apk
+        apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android dist/F-cam-aligned.apk
         cp dist/F-cam-aligned.apk dist/F-cam-release.apk
 
     - name: Upload Built APK Artifact
