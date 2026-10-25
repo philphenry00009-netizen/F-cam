@@ -26,12 +26,9 @@ jobs:
 
     - name: Purge Problematic AVD Drawables (AAPT2 Fix)
       run: |
-        echo "Removing Material AVD XML files that trigger internal $ resource generation..."
-        rm -f res/drawable/avd_*.xml
-        rm -f res/drawable/m3_avd_*.xml
-        rm -f res/drawable/mtrl_checkbox_*.xml
-        rm -f res/drawable/follow_focus.xml
-        echo "AAPT2 resource purge complete."
+        echo "Removing any files containing dollar signs in res/..."
+        find res/ -name '*$*' -delete
+        echo "Purge complete."
 
     - name: Build Unsigned APK
       run: |
