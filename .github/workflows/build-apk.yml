@@ -24,27 +24,25 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Purge Problematic Files and API 34 Colors Override
+    - name: Purge Problematic Animation XML Files
       run: |
         python3 -c "
         import os
 
-        print('--- STEP 1: Deleting physical files with dollar signs ---')
+        print('--- Purging AVD and Material Animation XML files ---')
+        deleted = 0
         for root, dirs, files in os.walk('res'):
             for f in files:
-                if '$' in f:
+                # Target the exact files that force aapt2 to generate illegal $ names
+                if f.startswith('avd_') or f.startswith('m3_avd_') or f.startswith('mtrl_checkbox_') or f.startswith('follow_focus'):
                     path = os.path.join(root, f)
                     try:
                         os.remove(path)
                         print(f'Deleted: {path}')
-                    except Exception:
-                        pass
-
-        print('--- STEP 2: Removing restricted API 34 colors.xml override ---')
-        target_colors = 'res/values-v34/colors.xml'
-        if os.path.exists(target_colors):
-            os.remove(target_colors)
-            print(f'Successfully removed {target_colors}')
+                        deleted += 1
+                    except Exception as e:
+                        print(f'Failed to delete {path}: {e}')
+        print(f'Total animation files purged: {deleted}')
         "
 
     - name: Build Unsigned APK
