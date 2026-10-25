@@ -223,6 +223,28 @@ jobs:
             echo "No SDK platform jar found; using Apktool's bundled framework"
           fi
 
+      # Fixes: "The new package requires at least one split and it was not provided".
+      # The app was decoded from an app bundle (base + splits). Remove the
+      # "splits required" flags so the base APK installs on its own.
+      # Also lowers minSdk 33 -> 31 so a Galaxy S10 (Android 12) will accept it.
+      # (Change MIN_SDK below if you want a different value.)
+      - name: Make APK installable as a single APK
+        env:
+          MIN_SDK: "31"
+        run: |
+          M=AndroidManifest.xml
+          sed -i -E 's/[[:space:]]+android:isSplitRequired="[^"]*"//g' "$M"
+          sed -i -E 's/[[:space:]]+android:requiredSplitTypes="[^"]*"//g' "$M"
+          sed -i -E 's/[[:space:]]+android:splitTypes="[^"]*"//g' "$M"
+          sed -i -E '/com\.android\.vending\.splits/d' "$M"
+          sed -i -E "s/(minSdkVersion: ')[0-9]+(')/\1${MIN_SDK}\2/" apktool.yml
+          echo "--- split flags left in manifest (should be none) ---"
+          grep -n -iE "isSplitRequired|vending.splits|requiredSplitTypes" "$M" || echo "none"
+          echo "--- sdkInfo ---"
+          grep -n -A3 "sdkInfo" apktool.yml
+          echo "--- native libs present in repo? ---"
+          ls lib 2>/dev/null || echo "NO lib/ folder (native libraries live in a split)"
+
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
