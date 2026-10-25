@@ -142,10 +142,85 @@ jobs:
                       print("patched", p)
           PY
 
+      # Fixes: "resource drawable/$avd_hide_password__0 ... not found".
+      # Any drawable XML that references a missing $-named resource is replaced
+      # by a tiny transparent drawable with the SAME file name, so every other
+      # reference to it (layouts, styles, smali ids) still resolves.
+      - name: Stub drawables that reference missing resources
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          STUB = (
+              '<?xml version="1.0" encoding="utf-8"?>\n'
+              '<shape xmlns:android="http://schemas.android.com/apk/res/android">\n'
+              '    <size android:width="1dp" android:height="1dp"/>\n'
+              '    <solid android:color="#00000000"/>\n'
+              '</shape>\n'
+          )
+          ref = re.compile(r'@drawable/([$\w]+)')
+
+          defined = set()
+          for d in os.listdir("res"):
+              if d.startswith("drawable"):
+                  for f in os.listdir(os.path.join("res", d)):
+                      defined.add(os.path.splitext(f)[0])
+
+          def is_bad(name):
+              return name.startswith(("$", "dollar_")) and name not in defined
+
+          stubbed = 0
+          for d in sorted(os.listdir("res")):
+              if not d.startswith("drawable"):
+                  continue
+              for f in os.listdir(os.path.join("res", d)):
+                  if not f.endswith(".xml"):
+                      continue
+                  p = os.path.join("res", d, f)
+                  s = open(p, encoding="utf-8", errors="ignore").read()
+                  if any(is_bad(n) for n in ref.findall(s)):
+                      open(p, "w", encoding="utf-8").write(STUB)
+                      stubbed += 1
+                      print("stubbed", p)
+          print(f"Stubbed {stubbed} drawables")
+
+          # Report (don't change) anything outside drawable dirs that still points at a missing one
+          for root, _, files in os.walk("res"):
+              if os.path.basename(root).startswith("drawable"):
+                  continue
+              for f in files:
+                  if f.endswith(".xml"):
+                      p = os.path.join(root, f)
+                      s = open(p, encoding="utf-8", errors="ignore").read()
+                      bad = [n for n in ref.findall(s) if is_bad(n)]
+                      if bad:
+                          print("WARNING still references missing:", p, bad)
+          PY
+
       - name: Build Unsigned APK
         run: |
           mkdir -p dist
-          apktool b . -o dist/unsigned.apk
+          set +e
+          apktool b . -o dist/unsigned.apk > build.log 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "=================== BUILD FAILED ==================="
+            echo "--- Unique error lines (first 25) ---"
+            grep -iE "error|exception|not found|no definition|invalid" build.log \
+              | sed -E 's#/home/runner/work/[^ ]*/res/#res/#g' \
+              | sort -u | head -25
+            echo "--- Last 15 lines ---"
+            tail -15 build.log
+            exit "$code"
+          fi
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-log
+          path: build.log
 
       - name: Zipalign and Sign APK with Test Key
         run: |
