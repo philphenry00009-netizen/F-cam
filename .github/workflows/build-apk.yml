@@ -24,11 +24,20 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y apktool android-sdk-build-tools
 
-    - name: Purge Problematic AVD Drawables (AAPT2 Fix)
+    - name: Purge Problematic AVD XML Files Recursively
       run: |
-        echo "Removing any files containing dollar signs in res/..."
-        find res/ -name '*$*' -delete
-        echo "Purge complete."
+        python3 -c "
+        import os
+        deleted = 0
+        for root, dirs, files in os.walk('res'):
+            for f in files:
+                if 'avd_' in f or 'mtrl_checkbox_' in f or 'follow_focus' in f:
+                    path = os.path.join(root, f)
+                    os.remove(path)
+                    print(f'Purged source XML: {path}')
+                    deleted += 1
+        print(f'Total animation source files purged: {deleted}')
+        "
 
     - name: Build Unsigned APK
       run: |
