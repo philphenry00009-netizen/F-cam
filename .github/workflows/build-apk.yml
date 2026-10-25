@@ -28,7 +28,7 @@ jobs:
         run: |
           mkdir -p dist
           python3 -c "import os\nfor r, ds, fs in os.walk(.):\n    if .git in r: continue\n    for f in fs:\n        if  in f:
-            os.rename(os.path.join(r, f), os.path.join(r, f.replace(, s_)))\n" && apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
+            os.rename(os.path.join(r, f), os.path.join(r, f.replace(, s_)))\n" && python3 clean_res.py && apktool b . -o dist/F-cam-unsigned.apk --use-aapt2
 
       - name: Generate Debug Keystore & Sign APK
         run: |
